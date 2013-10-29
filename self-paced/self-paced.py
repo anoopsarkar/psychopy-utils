@@ -1,8 +1,19 @@
 import csv
 import re
+import sys
 
 class SelfPaced:
+    """
+    To cleanup the output files on bash:
+    python self-paced.py input.csv 2> cleanup
+    cat cleanup | sed -e 's/^/rm /' | sh
+
+    To cleanup the output files on tcsh:
+    python self-paced.py input.csv >& cleanup
+    cat cleanup | sed -e 's/^/rm /' | sh
+    """
     def __init__(self):
+        self.outputFileHeader = 'Id'
         self.headerMap = {}
         self.lastIndex = -1
         self.headerTransform = {
@@ -21,7 +32,7 @@ class SelfPaced:
         for (index, region) in enumerate(regionList, start=1):
             outputList.append([ 
                 'R' + str(index),
-                " ".join([ "".join( hiddenList[0:index-1] ) , regionList[index-1] , "".join(hiddenList[index:] if index < len(regionList) else []) ]),
+                " ".join( hiddenList[0:index-1] + [ regionList[index-1] ] + (hiddenList[index:] if index < len(regionList) else []) ), 
                 correctAns,
                 str(len(regionList[index-1]))
                 ])
@@ -66,39 +77,48 @@ class SelfPaced:
             outputRows.append(output)
         return outputRows
 
-    def create(self, inputfilename, outputfilename):
+    def create(self, inputfilename):
         headerRow = True
+        outputHeader = []
         with open(inputfilename, 'rU') as csvfile:
-            with open(outputfilename, 'wb') as outputfile:
-                inputf = csv.reader(csvfile)
-                outputf = csv.writer(outputfile)
-                for row in inputf:
-                    if headerRow:
-                        outputRow = []
-                        for (index,header) in enumerate(row):
-                            self.headerMap[index] = header
-                            self.lastIndex = index
-                            if header in self.headerTransform:
-                                if self.headerTransform[header] is not None:
-                                    (func, outputList) = self.headerTransform[header]
-                                    outputRow.extend(outputList)
-                            else:
-                                outputRow.append(header)
-                        headerRow = False
-                        outputf.writerow(outputRow)
-                        print outputRow, self.headerMap, self.lastIndex
-                    else:
-                        func = None
-                        for (index,value) in enumerate(row):
-                            header = self.headerMap[index]
-                            if header in self.headerTransform:
-                                if self.headerTransform[header] is not None:
-                                    (func, outputList) = self.headerTransform[header]
+            inputf = csv.reader(csvfile)
+            for row in inputf:
+                if headerRow:
+                    outputRow = []
+                    for (index,header) in enumerate(row):
+                        self.headerMap[index] = header
+                        self.lastIndex = index
+                        if header in self.headerTransform:
+                            if self.headerTransform[header] is not None:
+                                (func, outputList) = self.headerTransform[header]
+                                outputHeader.extend(outputList)
+                        else:
+                            outputHeader.append(header)
+                    headerRow = False
+                else:
+                    func = None
+                    outputfilename = None
+                    for (index,value) in enumerate(row):
+                        header = self.headerMap[index]
+                        if header in self.headerTransform:
+                            if self.headerTransform[header] is not None:
+                                (func, outputList) = self.headerTransform[header]
+                        if header == self.outputFileHeader:
+                            outputfilename = value
+                    if func is None or outputfilename is None:
+                        raise ValueError
+                    outputfilename += ".csv"
+                    with open(outputfilename, 'wb') as outputfile:
+                        outputf = csv.writer(outputfile)
+                        outputf.writerow(outputHeader)
                         for outputRow in func(row):
                             outputf.writerow(outputRow)
-                            print "     ".join(outputRow)
+                    print >>sys.stderr, outputfilename
 
 if __name__ == '__main__':
-    s = SelfPaced()
-    #print s.convertSentence('A man who - the fact - that the manager - hired him - last year - was amazing - became a reporter.')
-    s.create('input.csv', 'output.csv')
+    if len(sys.argv) == 2:
+        s = SelfPaced()
+        #print s.convertSentence('A man who - the fact - that the manager - hired him - last year - was amazing - became a reporter.', '', '', '')
+        s.create(sys.argv[1])
+    else:
+        print >>sys.stderr, "usage: %s file.csv" % (sys.argv[0])
