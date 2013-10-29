@@ -12,17 +12,34 @@ class SelfPaced:
             'CorrectAns': None,
         }
 
-    def convertSentence(self, sentence):
+    def convertSentence(self, sentence, compQInstructionValue, compQuestionValue, correctAnsValue):
         correctAns = 'space'
         regionList = sentence.split(' - ')
         hiddenList = map(lambda x: re.sub(r'[^ ]', '_', x), regionList)
         outputList = [ ['R0', " ".join(hiddenList), correctAns, str(0)] ]
+        lastIndex = -1
         for (index, region) in enumerate(regionList, start=1):
             outputList.append([ 
                 'R' + str(index),
                 " ".join([ "".join( hiddenList[0:index-1] ) , regionList[index-1] , "".join(hiddenList[index:] if index < len(regionList) else []) ]),
+                correctAns,
                 str(len(regionList[index-1]))
                 ])
+            lastIndex = index
+        lastIndex += 1
+        outputList.append([ 
+            'R' + str(lastIndex),
+            compQInstructionValue,
+            correctAns,
+            str(len(compQInstructionValue))
+            ])
+        lastIndex += 1
+        outputList.append([ 
+            'R' + str(lastIndex),
+            compQuestionValue,
+            correctAnsValue,
+            str(len(compQuestionValue))
+            ])
         return outputList
 
     def selfPacedSentences(self, row):
@@ -42,7 +59,7 @@ class SelfPaced:
             else:
                 commonValues.append(value)
         outputRows = []
-        for sentenceOutput in self.convertSentence(sentenceValue):
+        for sentenceOutput in self.convertSentence(sentenceValue, compQInstructionValue, compQuestionValue, correctAnsValue): 
             output = []
             output.extend(commonValues)
             output.extend(sentenceOutput)
