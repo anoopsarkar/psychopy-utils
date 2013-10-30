@@ -33,7 +33,7 @@ class SelfPaced:
     def convertSentence(self, sentence, compQInstructionValue, compQuestionValue, correctAnsValue):
         correctAns = 'space'
         regionList = sentence.split(' - ')
-        hiddenList = map(lambda x: re.sub(r'[^ ]', '_', x), regionList)
+        hiddenList = map(lambda x: re.sub(r'[^ ]', u'\uFF3F', x), regionList)
         outputList = [ ['R0', " ".join(hiddenList), correctAns, str(0)] ]
         lastIndex = -1
         for (index, region) in enumerate(regionList, start=1):
@@ -117,7 +117,7 @@ class SelfPaced:
                         outputf = csv.writer(outputfile)
                         outputf.writerow(outputHeader)
                         for outputRow in func(row):
-                            outputf.writerow(outputRow)
+                            outputf.writerow(map(lambda x: x.encode('utf-8'), outputRow))
                     print >>sys.stderr, outputfilename
 
 if __name__ == '__main__':
