@@ -13,9 +13,16 @@ class SelfPaced:
     cat cleanup | sed -e 's/^/rm /' | sh
     """
     def __init__(self):
+        # outputFileHeader contains the prefix for the output filename with a .csv suffix
         self.outputFileHeader = 'Id'
         self.headerMap = {}
+        # lastIndex is the number of columns in the input (currently unused)
         self.lastIndex = -1
+        # headerTransform contains the mapping from input to output
+        # if the value is None, the column is removed (typically these values from input are used elsewhere)
+        # if the value contains a tuple, the first element is a function that takes the entire input row
+        # as input and produces possibly several rows of output with multiple columns returned as a list
+        # of rows; the second element of the tuple refers to the output column headers to be created
         self.headerTransform = {
             'Sentence': (self.selfPacedSentences, ['Region','Sentence','CorrectAns','NofCharacters']),
             'CompQInstruction': None,
@@ -32,21 +39,19 @@ class SelfPaced:
         for (index, region) in enumerate(regionList, start=1):
             outputList.append([ 
                 'R' + str(index),
-                " ".join( hiddenList[0:index-1] + [ regionList[index-1] ] + (hiddenList[index:] if index < len(regionList) else []) ), 
+                " ".join(hiddenList[0:index-1] + [regionList[index-1]] + hiddenList[index:]), 
                 correctAns,
                 str(len(regionList[index-1]))
                 ])
             lastIndex = index
-        lastIndex += 1
         outputList.append([ 
-            'R' + str(lastIndex),
+            'R' + str(lastIndex+1),
             compQInstructionValue,
             correctAns,
             str(len(compQInstructionValue))
             ])
-        lastIndex += 1
         outputList.append([ 
-            'R' + str(lastIndex),
+            'R' + str(lastIndex+2),
             compQuestionValue,
             correctAnsValue,
             str(len(compQuestionValue))
