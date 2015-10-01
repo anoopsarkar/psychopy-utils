@@ -1,19 +1,21 @@
-import csv, re, sys, optparse
+import csv, openpyxl, re, sys, optparse
 
 class SelfPaced:
     """
-    To cleanup the output files on bash:
+    To cleanup the output csv files on bash:
     python self-paced.py input.csv 2> cleanup
     cat cleanup | sed -e 's/^/rm /' | sh
 
-    To cleanup the output files on tcsh:
+    To cleanup the output csv files on tcsh:
     python self-paced.py input.csv >& cleanup
     cat cleanup | sed -e 's/^/rm /' | sh
     """
     def __init__(self):
         # outputFileName contains the default output filename for stdin. 
         # If a filename.csv is given in sys.argv then the output filename will be filename-regions.csv
-        self.outputFileName = 'default-regions' 
+        # This is commented out because stdin is not used anymore: 
+        # self.outputFileName = 'default-regions' 
+
         # default number of regions, at least one to pass through the sentence without any split
         self.numRegions = 0
         self.headerMap = {}
@@ -28,6 +30,10 @@ class SelfPaced:
             # 'CompQInstruction': None,
             # 'CompQuestion': None,
             # 'CorrectAns': None,
+        }
+        self.fileTypes = {
+            'csv': (self.readCSV, self.writeCSV),
+            'xlsx': (self.readExcel, self.writeExcel),
         }
 
     def getRegionsHeader(self, numregions):
@@ -49,55 +55,98 @@ class SelfPaced:
         outputList += [''] * (numregions - len(outputList))
         return outputList
 
-    def create(self, inputfilename, numregions):
-        # produce output filename, e.g. input.csv will become input-regions.csv
-        # if there is more than one extension e.g. input.x.y then output will be input-regions.x.y
-        self.fileNameSuffix = re.sub(r'[^.]*\.(.*)$', r'\1', inputfilename)
-        print >>sys.stderr, "file name suffix:", self.fileNameSuffix
-        self.outputFileName = re.sub(r'([^.]*)\.(.*)$', r'\1-regions.\2', inputfilename)
-        headerRow = True
-        outputHeader = []
-        outputRows = []
+    def readCSV(self, inputfilename):
+        data = []
         with open(inputfilename, 'rU') as csvfile:
             inputf = csv.reader(csvfile)
             for row in inputf:
-                if headerRow:
-                    outputHeader = []
-                    for (index, header) in enumerate(row):
-                        self.headerMap[index] = header
-                        if header in self.headerTransform:
-                            if self.headerTransform[header] is not None:
-                                (headerfunc, _) = self.headerTransform[header]
-                                outputHeader.extend(headerfunc(numregions))
-                            else:
-                                pass
-                                # if the value of headerTranform for header is None then the column is dropped
-                        else:
-                            outputHeader.append(header)
-                    headerRow = False
-                else:
-                    outputRow = []
-                    for (index, value) in enumerate(row):
-                        header = self.headerMap[index]
-                        if header in self.headerTransform:
-                            if self.headerTransform[header] is not None:
-                                (_, convertfunc) = self.headerTransform[header]
-                                outputRow.extend(convertfunc(value, numregions))
-                            else:
-                                pass
-                                # if the value of headerTranform for header is None then the column is dropped
-                        else:
-                            outputRow.append(value)
-                    #print >>sys.stderr, outputRow
-                    #print >>sys.stderr, outputRows
-                    #print >>sys.stderr, "\n\n"
-                    outputRows.append(outputRow)
-        with open(self.outputFileName, 'wb') as outputfile:
+                data.append(row)
+        return data
+
+    def writeCSV(self, outputHeader, outputRows, outputFileName):
+        with open(outputFileName, 'wb') as outputfile:
             outputf = csv.writer(outputfile, quoting=csv.QUOTE_NONNUMERIC)
             outputf.writerow(outputHeader)
             for outputRow in outputRows:
                 outputf.writerow(outputRow)
-        print >>sys.stderr, self.outputFileName
+
+    def readExcel(self, inputfilename):
+        data = []
+        wb = openpyxl.load_workbook(inputfilename)
+        for ws in wb:
+            for wr in ws.rows:
+                row = []
+                for cell in wr:
+                    row.append(cell.value)
+                data.append(row)
+        return data
+
+    def writeExcel(self, outputHeader, outputRows, outputFileName):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for j, headerValue in enumerate(outputHeader):
+            ws.cell(row = 0, column = j).value = headerValue
+        for i, row in enumerate(outputRows, start=1):
+            for j, value in enumerate(row):
+                ws.cell(row = i, column = j).value = value
+        wb.save(outputFileName)
+
+    def create(self, inputfilename, numregions):
+        # produce output filename, e.g. input.csv will become input-regions.csv
+        # if there is more than one extension e.g. input.x.y then output will be input-regions.x.y
+        fileNameSuffix = re.sub(r'[^.]*\.(.*)$', r'\1', inputfilename)
+        outputFileName = re.sub(r'([^.]*)\.(.*)$', r'\1-regions.\2', inputfilename)
+        headerRow = True
+        outputHeader = []
+        outputRows = []
+        data = []
+
+        print >>sys.stderr, "file name suffix:", fileNameSuffix
+        if fileNameSuffix in self.fileTypes:
+            (readfunc, _) = self.fileTypes[fileNameSuffix]
+            data = readfunc(inputfilename)
+        else:
+            raise ValueError("unknown file name type: %s" % (inputfilename))
+
+        for row in data:
+            if headerRow:
+                outputHeader = []
+                for (index, header) in enumerate(row):
+                    self.headerMap[index] = header
+                    if header in self.headerTransform:
+                        if self.headerTransform[header] is not None:
+                            (headerfunc, _) = self.headerTransform[header]
+                            outputHeader.extend(headerfunc(numregions))
+                        else:
+                            pass
+                            # if the value of headerTranform for header is None then the column is dropped
+                    else:
+                        outputHeader.append(header)
+                headerRow = False
+            else:
+                outputRow = []
+                for (index, value) in enumerate(row):
+                    header = self.headerMap[index]
+                    if header in self.headerTransform:
+                        if self.headerTransform[header] is not None:
+                            (_, convertfunc) = self.headerTransform[header]
+                            outputRow.extend(convertfunc(value, numregions))
+                        else:
+                            pass
+                            # if the value of headerTranform for header is None then the column is dropped
+                    else:
+                        outputRow.append(value)
+                #print >>sys.stderr, outputRow
+                #print >>sys.stderr, outputRows
+                #print >>sys.stderr, "\n\n"
+                outputRows.append(outputRow)
+
+        if fileNameSuffix in self.fileTypes:
+            (_, writefunc) = self.fileTypes[fileNameSuffix]
+            writefunc(outputHeader, outputRows, outputFileName)
+            print >>sys.stderr, outputFileName
+        else:
+            raise ValueError("unknown file name type: %s" % (inputfilename))
 
 if __name__ == '__main__':
     if False:
