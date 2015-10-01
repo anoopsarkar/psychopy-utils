@@ -53,6 +53,7 @@ class SelfPaced:
         # produce output filename, e.g. input.csv will become input-regions.csv
         # if there is more than one extension e.g. input.x.y then output will be input-regions.x.y
         self.fileNameSuffix = re.sub(r'[^.]*\.(.*)$', r'\1', inputfilename)
+        print >>sys.stderr, "file name suffix:", self.fileNameSuffix
         self.outputFileName = re.sub(r'([^.]*)\.(.*)$', r'\1-regions.\2', inputfilename)
         headerRow = True
         outputHeader = []
