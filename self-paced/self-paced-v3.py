@@ -18,7 +18,8 @@ class SelfPaced:
 
         # default number of regions, at least one to pass through the sentence without any split
         self.numRegions = 0
-        self.headerMap = {}
+        # set charcounts to True to enable additional columns containing the character count for each region
+        self.charcounts = False
         # headerTransform contains the mapping from input to output
         # if the value is None, the column is removed (typically these values from input are used elsewhere)
         # if the value contains a tuple, the first element is a function that takes the entire input row
@@ -31,6 +32,8 @@ class SelfPaced:
             # 'CompQuestion': None,
             # 'CorrectAns': None,
         }
+        self.headerMap = {}
+        # different input files get their own reader and writer functions
         self.fileTypes = {
             'csv': (self.readCSV, self.writeCSV),
             'xlsx': (self.readExcel, self.writeExcel),
@@ -40,18 +43,29 @@ class SelfPaced:
         outputList = []
         for index in xrange(numregions):
             outputList.append('R' + str(index))
+            if self.charcounts:
+                outputList.append('R' + str(index) + 'CharCount')
         return outputList
 
     def convertSentence(self, sentence, numregions):
         regionList = sentence.split(' - ')
         hiddenList = map(lambda x: re.sub(r'[^ ]', '_', x), regionList)
         outputList = [ " ".join(hiddenList) ]
+        if self.charcounts:
+            outputList.append( 0 )
         for (index, region) in enumerate(regionList, start=1):
             outputList.append( 
                 " ".join(hiddenList[0:index-1] + [regionList[index-1]] + hiddenList[index:])
                 )
-        if len(outputList) > numregions:
-            raise ValueError("invalid number of regions: outputList len is %d and numregions is %d" % (len(outputList), numregions))
+            if self.charcounts:
+                outputList.append( len(regionList[index-1]) )
+                # print >>sys.stderr, regionList[index-1], len(regionList[index-1])
+        if self.charcounts:
+            if len(outputList) > numregions*2:
+                raise ValueError("invalid number of regions: outputList len is %d and numregions is %d" % (len(outputList), numregions))
+        else:
+            if len(outputList) > numregions:
+                raise ValueError("invalid number of regions: outputList len is %d and numregions is %d" % (len(outputList), numregions))
         outputList += [''] * (numregions - len(outputList))
         return outputList
 
@@ -91,9 +105,10 @@ class SelfPaced:
                 ws.cell(row = i, column = j).value = value
         wb.save(outputFileName)
 
-    def create(self, inputfilename, numregions):
+    def create(self, inputfilename, numregions, charcounts):
         # produce output filename, e.g. input.csv will become input-regions.csv
         # if there is more than one extension e.g. input.x.y then output will be input-regions.x.y
+        self.charcounts = charcounts
         fileNameSuffix = re.sub(r'[^.]*\.(.*)$', r'\1', inputfilename)
         outputFileName = re.sub(r'([^.]*)\.(.*)$', r'\1-regions.\2', inputfilename)
         headerRow = True
@@ -133,7 +148,7 @@ class SelfPaced:
                             outputRow.extend(convertfunc(value, numregions))
                         else:
                             pass
-                            # if the value of headerTranform for header is None then the column is dropped
+                            # if the value of headerTransform for header is None then the column is dropped
                     else:
                         outputRow.append(value)
                 #print >>sys.stderr, outputRow
@@ -158,9 +173,11 @@ if __name__ == '__main__':
         optparser = optparse.OptionParser()
         optparser.add_option("-n", "--numregions", dest="numregions", default=0, help="number of regions in each sentence (default=0)")
         optparser.add_option("-i", "--inputfile", dest="inputfile", default='input-v2.csv', help="input filename (default=input-v2.csv)")
+        optparser.add_option("-c", "--charcounts", dest="charcounts", action="store_true", default=False, help="add character counts of each region to output")
         (opts, _) = optparser.parse_args()
         s = SelfPaced()
         if int(opts.numregions) <= 0:
             optparser.print_help()
             sys.exit(1)
-        s.create(opts.inputfile, int(opts.numregions))
+        s.create(opts.inputfile, int(opts.numregions), opts.charcounts)
+
